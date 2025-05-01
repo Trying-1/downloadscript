@@ -26,7 +26,7 @@ from pathlib import Path
 from urllib.parse import urlparse, parse_qs
 from typing import List, Optional
 
-def setup_logging(log_dir: str = None):
+def setup_logging(log_dir: str = None) -> logging.Logger:
     """Configure logging with file and console handlers."""
     try:
         log_dir = Path(log_dir) if log_dir else Path.cwd()
@@ -52,12 +52,12 @@ def setup_logging(log_dir: str = None):
         sys.exit(1)
 
 class InstagramDownloader:
-    def __init__(self, base_output_dir: str):
+    def __init__(self, base_output_dir: str, log_dir: str = None):
+        self.logger = setup_logging(log_dir)
         try:
             self.base_output_dir = Path(base_output_dir)
             self.base_output_dir.mkdir(parents=True, exist_ok=True)
             self.instaloader = self._setup_instaloader()
-            self.logger = logging.getLogger(__name__)
             self.max_retries = 3  # Maximum number of retries for failed downloads
             self.retry_delay = 60  # Delay between retries in seconds
         except Exception as e:
@@ -192,25 +192,21 @@ def main():
                           help='Directory for log files (default: current directory)')
         args = parser.parse_args()
 
-        # Setup logging
-        logger = setup_logging(args.log_dir)
-        logger.info("Starting Instagram Reel Downloader")
-
-        # Initialize downloader
-        downloader = InstagramDownloader(args.output_dir)
+        # Initialize downloader with logging
+        downloader = InstagramDownloader(args.output_dir, args.log_dir)
         
         # Process all CSV files in the directory
         csv_dir = Path(args.csv_dir)
         if not csv_dir.exists():
-            logger.error(f"CSV directory not found: {csv_dir}")
+            downloader.logger.error(f"CSV directory not found: {csv_dir}")
             sys.exit(1)
 
         for csv_file in csv_dir.glob('*.csv'):
             downloader.process_csv(csv_file)
 
     except Exception as e:
-        logger.error(f"Fatal error: {e}")
-        logger.error(traceback.format_exc())
+        print(f"Fatal error: {e}", file=sys.stderr)
+        print(traceback.format_exc(), file=sys.stderr)
         sys.exit(1)
 
 if __name__ == "__main__":
