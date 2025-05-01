@@ -15,49 +15,67 @@ Features:
 import instaloader
 import re
 import os
+import sys
 import argparse
 import csv
 import logging
+import traceback
 from pathlib import Path
 from urllib.parse import urlparse, parse_qs
 from typing import List, Optional
 
 def setup_logging(log_dir: str = None):
     """Configure logging with file and console handlers."""
-    log_dir = Path(log_dir) if log_dir else Path.cwd()
-    log_dir.mkdir(parents=True, exist_ok=True)
-    
-    log_file = log_dir / 'instagram_downloader.log'
-    
-    logging.basicConfig(
-        level=logging.INFO,
-        format='%(asctime)s - %(levelname)s - %(message)s',
-        handlers=[
-            logging.StreamHandler(),
-            logging.FileHandler(log_file)
-        ]
-    )
-    return logging.getLogger(__name__)
+    try:
+        log_dir = Path(log_dir) if log_dir else Path.cwd()
+        log_dir.mkdir(parents=True, exist_ok=True)
+        
+        log_file = log_dir / 'instagram_downloader.log'
+        
+        # Remove any existing handlers
+        for handler in logging.root.handlers[:]:
+            logging.root.removeHandler(handler)
+        
+        logging.basicConfig(
+            level=logging.INFO,
+            format='%(asctime)s - %(levelname)s - %(message)s',
+            handlers=[
+                logging.StreamHandler(sys.stdout),
+                logging.FileHandler(log_file)
+            ]
+        )
+        return logging.getLogger(__name__)
+    except Exception as e:
+        print(f"Error setting up logging: {e}", file=sys.stderr)
+        sys.exit(1)
 
 class InstagramDownloader:
     def __init__(self, base_output_dir: str):
-        self.base_output_dir = Path(base_output_dir)
-        self.base_output_dir.mkdir(parents=True, exist_ok=True)
-        self.instaloader = self._setup_instaloader()
-        self.logger = logging.getLogger(__name__)
+        try:
+            self.base_output_dir = Path(base_output_dir)
+            self.base_output_dir.mkdir(parents=True, exist_ok=True)
+            self.instaloader = self._setup_instaloader()
+            self.logger = logging.getLogger(__name__)
+        except Exception as e:
+            self.logger.error(f"Error initializing downloader: {e}")
+            raise
 
     def _setup_instaloader(self) -> instaloader.Instaloader:
         """Initialize and configure Instaloader."""
-        return instaloader.Instaloader(
-            download_videos=True,
-            download_video_thumbnails=False,
-            download_geotags=False,
-            download_comments=False,
-            save_metadata=False,
-            compress_json=False,
-            post_metadata_txt_pattern="",
-            filename_pattern="{date_utc:%Y-%m-%d_%H-%M-%S}"
-        )
+        try:
+            return instaloader.Instaloader(
+                download_videos=True,
+                download_video_thumbnails=False,
+                download_geotags=False,
+                download_comments=False,
+                save_metadata=False,
+                compress_json=False,
+                post_metadata_txt_pattern="",
+                filename_pattern="{date_utc:%Y-%m-%d_%H-%M-%S}"
+            )
+        except Exception as e:
+            self.logger.error(f"Error setting up Instaloader: {e}")
+            raise
 
     def extract_shortcode(self, url: str) -> Optional[str]:
         """Extract the shortcode from an Instagram URL."""
@@ -147,32 +165,39 @@ class InstagramDownloader:
 
         except Exception as e:
             self.logger.error(f"Error processing CSV file {csv_path}: {e}")
+            self.logger.error(traceback.format_exc())
 
 def main():
-    parser = argparse.ArgumentParser(description='Download Instagram reels from CSV files')
-    parser.add_argument('--csv-dir', type=str, default='./links',
-                      help='Directory containing CSV files (default: ./links)')
-    parser.add_argument('--output-dir', type=str, default='./downloads',
-                      help='Base directory for saving downloaded reels (default: ./downloads)')
-    parser.add_argument('--log-dir', type=str, default=None,
-                      help='Directory for log files (default: current directory)')
-    args = parser.parse_args()
+    try:
+        parser = argparse.ArgumentParser(description='Download Instagram reels from CSV files')
+        parser.add_argument('--csv-dir', type=str, default='./links',
+                          help='Directory containing CSV files (default: ./links)')
+        parser.add_argument('--output-dir', type=str, default='./downloads',
+                          help='Base directory for saving downloaded reels (default: ./downloads)')
+        parser.add_argument('--log-dir', type=str, default=None,
+                          help='Directory for log files (default: current directory)')
+        args = parser.parse_args()
 
-    # Setup logging
-    logger = setup_logging(args.log_dir)
-    logger.info("Starting Instagram Reel Downloader")
+        # Setup logging
+        logger = setup_logging(args.log_dir)
+        logger.info("Starting Instagram Reel Downloader")
 
-    # Initialize downloader
-    downloader = InstagramDownloader(args.output_dir)
-    
-    # Process all CSV files in the directory
-    csv_dir = Path(args.csv_dir)
-    if not csv_dir.exists():
-        logger.error(f"CSV directory not found: {csv_dir}")
-        return
+        # Initialize downloader
+        downloader = InstagramDownloader(args.output_dir)
+        
+        # Process all CSV files in the directory
+        csv_dir = Path(args.csv_dir)
+        if not csv_dir.exists():
+            logger.error(f"CSV directory not found: {csv_dir}")
+            sys.exit(1)
 
-    for csv_file in csv_dir.glob('*.csv'):
-        downloader.process_csv(csv_file)
+        for csv_file in csv_dir.glob('*.csv'):
+            downloader.process_csv(csv_file)
+
+    except Exception as e:
+        logger.error(f"Fatal error: {e}")
+        logger.error(traceback.format_exc())
+        sys.exit(1)
 
 if __name__ == "__main__":
     main() 

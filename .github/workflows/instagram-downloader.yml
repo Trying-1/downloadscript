@@ -22,21 +22,39 @@ jobs:
         python -m pip install --upgrade pip
         pip install -r requirements.txt
     
-    - name: Create output directory
+    - name: Create directories
       run: |
         mkdir -p ${{ secrets.BASE_OUTPUT_DIR }}
+        mkdir -p logs
     
     - name: Run Instagram Downloader
+      id: downloader
       env:
         BASE_OUTPUT_DIR: ${{ secrets.BASE_OUTPUT_DIR }}
       run: |
-        # Create logs directory
+        # Ensure logs directory exists
         mkdir -p logs
-        # Run the downloader with log file in logs directory
-        python src/downloader.py --csv-dir ./links --output-dir ${{ secrets.BASE_OUTPUT_DIR }} --log-dir ./logs
+        
+        # Run the downloader and capture output
+        python src/downloader.py --csv-dir ./links --output-dir ${{ secrets.BASE_OUTPUT_DIR }} --log-dir ./logs 2>&1 | tee logs/instagram_downloader.log
+        
+        # If the script failed, append error message to log
+        if [ $? -ne 0 ]; then
+          echo "Script failed with exit code $?" >> logs/instagram_downloader.log
+        fi
+    
+    - name: Check if log file exists
+      id: check_logs
+      run: |
+        if [ -f "logs/instagram_downloader.log" ]; then
+          echo "exists=true" >> $GITHUB_OUTPUT
+        else
+          echo "exists=false" >> $GITHUB_OUTPUT
+          echo "No log file was generated" > logs/instagram_downloader.log
+        fi
     
     - name: Upload logs
-      if: always()  # Upload logs even if the previous step fails
+      if: always()
       uses: actions/upload-artifact@v3
       with:
         name: instagram-downloader-logs
