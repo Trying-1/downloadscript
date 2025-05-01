@@ -30,11 +30,15 @@ jobs:
       env:
         BASE_OUTPUT_DIR: ${{ secrets.BASE_OUTPUT_DIR }}
       run: |
-        python src/downloader.py --csv-dir ./links --output-dir ${{ secrets.BASE_OUTPUT_DIR }}
+        # Create logs directory
+        mkdir -p logs
+        # Run the downloader with log file in logs directory
+        python src/downloader.py --csv-dir ./links --output-dir ${{ secrets.BASE_OUTPUT_DIR }} --log-dir ./logs
     
     - name: Upload logs
+      if: always()  # Upload logs even if the previous step fails
       uses: actions/upload-artifact@v3
       with:
         name: instagram-downloader-logs
-        path: instagram_downloader.log
+        path: logs/instagram_downloader.log
         retention-days: 5 

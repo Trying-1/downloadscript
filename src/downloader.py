@@ -6,7 +6,7 @@ It extracts the shortcode from the URL and downloads the reel in high quality.
 
 Features:
 - Downloads Instagram reels in high quality
-- Processes multiple CSV files
+- Processes multiple CSV files automatically
 - Creates organized output directories
 - Provides detailed logging
 - Handles errors gracefully
@@ -22,22 +22,29 @@ from pathlib import Path
 from urllib.parse import urlparse, parse_qs
 from typing import List, Optional
 
-# Configure logging
-logging.basicConfig(
-    level=logging.INFO,
-    format='%(asctime)s - %(levelname)s - %(message)s',
-    handlers=[
-        logging.StreamHandler(),
-        logging.FileHandler('instagram_downloader.log')
-    ]
-)
-logger = logging.getLogger(__name__)
+def setup_logging(log_dir: str = None):
+    """Configure logging with file and console handlers."""
+    log_dir = Path(log_dir) if log_dir else Path.cwd()
+    log_dir.mkdir(parents=True, exist_ok=True)
+    
+    log_file = log_dir / 'instagram_downloader.log'
+    
+    logging.basicConfig(
+        level=logging.INFO,
+        format='%(asctime)s - %(levelname)s - %(message)s',
+        handlers=[
+            logging.StreamHandler(),
+            logging.FileHandler(log_file)
+        ]
+    )
+    return logging.getLogger(__name__)
 
 class InstagramDownloader:
     def __init__(self, base_output_dir: str):
         self.base_output_dir = Path(base_output_dir)
         self.base_output_dir.mkdir(parents=True, exist_ok=True)
         self.instaloader = self._setup_instaloader()
+        self.logger = logging.getLogger(__name__)
 
     def _setup_instaloader(self) -> instaloader.Instaloader:
         """Initialize and configure Instaloader."""
@@ -75,7 +82,7 @@ class InstagramDownloader:
             
             return None
         except Exception as e:
-            logger.error(f"Error extracting shortcode from URL {url}: {e}")
+            self.logger.error(f"Error extracting shortcode from URL {url}: {e}")
             return None
 
     def download_reel(self, shortcode: str, output_dir: Path) -> bool:
@@ -90,29 +97,29 @@ class InstagramDownloader:
             post = instaloader.Post.from_shortcode(self.instaloader.context, shortcode)
             self.instaloader.download_post(post, target=None)
             
-            logger.info(f"Successfully downloaded reel: {shortcode}")
+            self.logger.info(f"Successfully downloaded reel: {shortcode}")
             return True
             
         except instaloader.exceptions.InstaloaderException as e:
-            logger.error(f"Instaloader error downloading reel {shortcode}: {e}")
+            self.logger.error(f"Instaloader error downloading reel {shortcode}: {e}")
             return False
         except Exception as e:
-            logger.error(f"Unexpected error downloading reel {shortcode}: {e}")
+            self.logger.error(f"Unexpected error downloading reel {shortcode}: {e}")
             return False
 
     def process_csv(self, csv_path: Path) -> None:
         """Process a CSV file containing Instagram reel URLs."""
         try:
             if not csv_path.exists():
-                logger.error(f"CSV file not found: {csv_path}")
+                self.logger.error(f"CSV file not found: {csv_path}")
                 return
 
             # Create output directory based on CSV filename
             output_dir = self.base_output_dir / csv_path.stem.lstrip('_')
             output_dir.mkdir(parents=True, exist_ok=True)
             
-            logger.info(f"Processing CSV: {csv_path}")
-            logger.info(f"Output directory: {output_dir}")
+            self.logger.info(f"Processing CSV: {csv_path}")
+            self.logger.info(f"Output directory: {output_dir}")
 
             with open(csv_path, 'r', encoding='utf-8') as f:
                 csv_reader = csv.reader(f)
@@ -121,25 +128,25 @@ class InstagramDownloader:
                 urls = [row[0].strip() for row in csv_reader if row and row[0].strip()]
 
             total = len(urls)
-            logger.info(f"Found {total} URLs to process")
+            self.logger.info(f"Found {total} URLs to process")
 
             successful = 0
             for i, url in enumerate(urls, 1):
-                logger.info(f"Processing {i}/{total}: {url}")
+                self.logger.info(f"Processing {i}/{total}: {url}")
                 shortcode = self.extract_shortcode(url)
                 if shortcode:
                     if self.download_reel(shortcode, output_dir):
                         successful += 1
-                        logger.info(f"Successfully downloaded {i}/{total}")
+                        self.logger.info(f"Successfully downloaded {i}/{total}")
                     else:
-                        logger.error(f"Failed to download {i}/{total}")
+                        self.logger.error(f"Failed to download {i}/{total}")
                 else:
-                    logger.error(f"Could not extract shortcode from URL: {url}")
+                    self.logger.error(f"Could not extract shortcode from URL: {url}")
 
-            logger.info(f"Download complete. Successfully downloaded {successful}/{total} reels")
+            self.logger.info(f"Download complete. Successfully downloaded {successful}/{total} reels")
 
         except Exception as e:
-            logger.error(f"Error processing CSV file {csv_path}: {e}")
+            self.logger.error(f"Error processing CSV file {csv_path}: {e}")
 
 def main():
     parser = argparse.ArgumentParser(description='Download Instagram reels from CSV files')
@@ -147,7 +154,13 @@ def main():
                       help='Directory containing CSV files (default: ./links)')
     parser.add_argument('--output-dir', type=str, default='./downloads',
                       help='Base directory for saving downloaded reels (default: ./downloads)')
+    parser.add_argument('--log-dir', type=str, default=None,
+                      help='Directory for log files (default: current directory)')
     args = parser.parse_args()
+
+    # Setup logging
+    logger = setup_logging(args.log_dir)
+    logger.info("Starting Instagram Reel Downloader")
 
     # Initialize downloader
     downloader = InstagramDownloader(args.output_dir)
