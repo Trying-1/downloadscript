@@ -23,8 +23,10 @@ jobs:
         pip install -r requirements.txt
     
     - name: Create directories
+      env:
+        BASE_OUTPUT_DIR: ${{ secrets.BASE_OUTPUT_DIR }}
       run: |
-        mkdir -p ${{ secrets.BASE_OUTPUT_DIR }}
+        mkdir -p "$BASE_OUTPUT_DIR"
         mkdir -p logs
     
     - name: Run Instagram Downloader
@@ -36,7 +38,7 @@ jobs:
         mkdir -p logs
         
         # Run the downloader and capture output
-        python src/downloader.py --csv-dir ./links --output-dir ${{ secrets.BASE_OUTPUT_DIR }} --log-dir ./logs 2>&1 | tee logs/instagram_downloader.log
+        python src/downloader.py --csv-dir ./links --output-dir "$BASE_OUTPUT_DIR" --log-dir ./logs 2>&1 | tee logs/instagram_downloader.log
         
         # If the script failed, append error message to log
         if [ $? -ne 0 ]; then
