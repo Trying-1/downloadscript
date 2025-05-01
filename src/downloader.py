@@ -10,6 +10,7 @@ Features:
 - Creates organized output directories
 - Provides detailed logging
 - Handles errors gracefully
+- Implements rate limiting to avoid Instagram blocks
 """
 
 import instaloader
@@ -20,6 +21,7 @@ import argparse
 import csv
 import logging
 import traceback
+import time
 from pathlib import Path
 from urllib.parse import urlparse, parse_qs
 from typing import List, Optional
@@ -56,6 +58,8 @@ class InstagramDownloader:
             self.base_output_dir.mkdir(parents=True, exist_ok=True)
             self.instaloader = self._setup_instaloader()
             self.logger = logging.getLogger(__name__)
+            self.max_retries = 3  # Maximum number of retries for failed downloads
+            self.retry_delay = 60  # Delay between retries in seconds
         except Exception as e:
             self.logger.error(f"Error initializing downloader: {e}")
             raise
@@ -63,7 +67,7 @@ class InstagramDownloader:
     def _setup_instaloader(self) -> instaloader.Instaloader:
         """Initialize and configure Instaloader."""
         try:
-            return instaloader.Instaloader(
+            loader = instaloader.Instaloader(
                 download_videos=True,
                 download_video_thumbnails=False,
                 download_geotags=False,
@@ -73,6 +77,13 @@ class InstagramDownloader:
                 post_metadata_txt_pattern="",
                 filename_pattern="{date_utc:%Y-%m-%d_%H-%M-%S}"
             )
+            # Add rate limiting
+            loader.context._rate_controller = instaloader.RateController(
+                loader.context,
+                max_attempts=3,  # Maximum number of attempts per request
+                wait_between_attempts=60  # Wait 60 seconds between attempts
+            )
+            return loader
         except Exception as e:
             self.logger.error(f"Error setting up Instaloader: {e}")
             raise
@@ -104,26 +115,27 @@ class InstagramDownloader:
             return None
 
     def download_reel(self, shortcode: str, output_dir: Path) -> bool:
-        """Download a reel using its shortcode."""
-        try:
-            output_dir.mkdir(parents=True, exist_ok=True)
-            
-            # Set the output directory for this download
-            self.instaloader.dirname_pattern = str(output_dir)
-            
-            # Get and download the post
-            post = instaloader.Post.from_shortcode(self.instaloader.context, shortcode)
-            self.instaloader.download_post(post, target=None)
-            
-            self.logger.info(f"Successfully downloaded reel: {shortcode}")
-            return True
-            
-        except instaloader.exceptions.InstaloaderException as e:
-            self.logger.error(f"Instaloader error downloading reel {shortcode}: {e}")
-            return False
-        except Exception as e:
-            self.logger.error(f"Unexpected error downloading reel {shortcode}: {e}")
-            return False
+        """Download a reel using its shortcode with retry logic."""
+        for attempt in range(self.max_retries):
+            try:
+                output_dir.mkdir(parents=True, exist_ok=True)
+                self.instaloader.dirname_pattern = str(output_dir)
+                post = instaloader.Post.from_shortcode(self.instaloader.context, shortcode)
+                self.instaloader.download_post(post, target=None)
+                self.logger.info(f"Successfully downloaded reel: {shortcode}")
+                return True
+            except instaloader.exceptions.InstaloaderException as e:
+                if "Please wait a few minutes" in str(e):
+                    self.logger.warning(f"Rate limited on attempt {attempt + 1}/{self.max_retries}. Waiting {self.retry_delay} seconds...")
+                    if attempt < self.max_retries - 1:
+                        time.sleep(self.retry_delay)
+                        continue
+                self.logger.error(f"Instaloader error downloading reel {shortcode}: {e}")
+                return False
+            except Exception as e:
+                self.logger.error(f"Unexpected error downloading reel {shortcode}: {e}")
+                return False
+        return False
 
     def process_csv(self, csv_path: Path) -> None:
         """Process a CSV file containing Instagram reel URLs."""
@@ -132,7 +144,6 @@ class InstagramDownloader:
                 self.logger.error(f"CSV file not found: {csv_path}")
                 return
 
-            # Create output directory based on CSV filename
             output_dir = self.base_output_dir / csv_path.stem.lstrip('_')
             output_dir.mkdir(parents=True, exist_ok=True)
             
@@ -141,7 +152,6 @@ class InstagramDownloader:
 
             with open(csv_path, 'r', encoding='utf-8') as f:
                 csv_reader = csv.reader(f)
-                # Skip header row if it exists
                 next(csv_reader, None)
                 urls = [row[0].strip() for row in csv_reader if row and row[0].strip()]
 
@@ -160,6 +170,10 @@ class InstagramDownloader:
                         self.logger.error(f"Failed to download {i}/{total}")
                 else:
                     self.logger.error(f"Could not extract shortcode from URL: {url}")
+                
+                # Add delay between downloads to avoid rate limiting
+                if i < total:
+                    time.sleep(5)  # 5 second delay between downloads
 
             self.logger.info(f"Download complete. Successfully downloaded {successful}/{total} reels")
 
