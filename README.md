@@ -5,10 +5,28 @@ A GitHub Actions workflow that automatically downloads Instagram reels from CSV 
 ## Features
 
 - Downloads Instagram reels in high quality
-- Processes multiple CSV files
+- Processes multiple CSV files automatically
 - Creates organized output directories
-- Runs automatically on schedule
+- Provides detailed logging
+- Runs on a daily schedule
 - Can be triggered manually
+- Handles errors gracefully
+
+## Project Structure
+
+```
+.
+├── .github/
+│   └── workflows/
+│       └── instagram-downloader.yml
+├── src/
+│   └── downloader.py
+├── links/
+│   ├── _.s0mebody.csv
+│   └── _instant_philosophy.csv
+├── requirements.txt
+└── README.md
+```
 
 ## Setup
 
@@ -27,6 +45,14 @@ https://www.instagram.com/reel/DEF456/
 
 ## Usage
 
+### Local Usage
+
+```bash
+python src/downloader.py --csv-dir ./links --output-dir ./downloads
+```
+
+### GitHub Actions
+
 The workflow runs automatically every day at 12:00 UTC. You can also trigger it manually:
 
 1. Go to the "Actions" tab in your repository
@@ -35,6 +61,16 @@ The workflow runs automatically every day at 12:00 UTC. You can also trigger it 
 
 ## Output
 
-Downloaded reels will be saved in subdirectories based on the CSV filename:
-- `{BASE_OUTPUT_DIR}/s0mebody/` for `_.s0mebody.csv`
-- `{BASE_OUTPUT_DIR}/instant_philosophy/` for `_instant_philosophy.csv` 
+- Downloaded reels will be saved in subdirectories based on the CSV filename
+- Logs are available in the GitHub Actions artifacts
+- Each CSV file gets its own output directory
+
+## Error Handling
+
+- Failed downloads are logged with detailed error messages
+- The script continues processing even if some downloads fail
+- Logs are saved both to file and GitHub Actions artifacts
+
+## Contributing
+
+Feel free to submit issues and enhancement requests! 

@@ -22,14 +22,19 @@ jobs:
         python -m pip install --upgrade pip
         pip install -r requirements.txt
     
-    - name: Create base output directory
+    - name: Create output directory
       run: |
         mkdir -p ${{ secrets.BASE_OUTPUT_DIR }}
     
-    - name: Process s0mebody CSV
+    - name: Run Instagram Downloader
+      env:
+        BASE_OUTPUT_DIR: ${{ secrets.BASE_OUTPUT_DIR }}
       run: |
-        python downloader.py ./links/_.s0mebody.csv --output-dir ${{ secrets.BASE_OUTPUT_DIR }}
+        python src/downloader.py --csv-dir ./links --output-dir ${{ secrets.BASE_OUTPUT_DIR }}
     
-    - name: Process instant_philosophy CSV
-      run: |
-        python downloader.py ./links/_instant_philosophy.csv --output-dir ${{ secrets.BASE_OUTPUT_DIR }} 
+    - name: Upload logs
+      uses: actions/upload-artifact@v3
+      with:
+        name: instagram-downloader-logs
+        path: instagram_downloader.log
+        retention-days: 5 
